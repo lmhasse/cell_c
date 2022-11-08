@@ -8,6 +8,56 @@ import tifffile
 import csv
 import PIL
 from tqdm import tqdm
+import copy
+
+
+def smallest_x(elem):
+    """ Helping function for sorting images filenames ascending
+
+    :param elem: string, filename of tile (e.g. "430,240")
+    :return: int, first number of tile name (e.g. 430)
+    """
+    return int(elem.split(",")[0])
+
+
+def composite_image(image_path, composite_x, composite_y, filename):
+    """ Generates full image of different tiles with corresponding coordinates
+
+    :param image_path: string, project name / original tiffs name
+    :param composite_x: int, width of original tiff
+    :param composite_y: int, length of original tiff
+    :param filename: string, desired images to compose (e.g. pseudochannel-1.png)
+    :return: void
+    """
+
+    composite = Image.new('RGB', (composite_x, composite_y))  # composite image
+    offset_x = 0
+    offset_y = 0
+
+    tiles_original = sorted(os.listdir(image_path), key=smallest_x)
+    tiles = copy.deepcopy(tiles_original)
+
+    for i in range(len(tiles)):
+        tiles[i] = tiles[i].split(",")
+        tiles[i] = [int(tiles[i][0]) - 5012, int(tiles[i][1]) - 26886]
+        if i > 0:
+            offset_y = int(tiles[i][1])
+            offset_x = int(tiles[i][0])
+        tiles[i] = [tiles[i][0] + offset_x, tiles[i][1] + offset_y]
+
+    i = 0
+    for tile in tiles_original:  # iterate over all tiles in project (e.g. "454,213")
+        tile = tile.split(",")
+
+        for file in os.listdir(image_path + str(tile[0]) + "," + str(tile[1])):  # iterate over files in tile folder
+            if file == filename:  # only composing images of same type
+                tile_im = Image.open(image_path + str(tile[0]) + "," + str(tile[1]) + "/" + file)
+
+                composite.paste(tile_im, tuple(tiles[i]))  # tuple(int(cord) for cord in offset))  # pasting into composite, cord is tiles
+                # upper left corner coordinates (x or y) in the full composite
+        i += 1
+
+    composite.save(filename.replace(".png", "_composite.png"))
 
 
 def generate_map(image_file, x, y, downsample):
@@ -92,6 +142,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--function', type=str, default="plot", required=False,
                         help="type 'comp_txt' for generating a composite text from ImmuNets prediction.txt\n")
+
+    # Args for composite_prediction
     parser.add_argument('--x', type=int, default=1908, required=False,
                         help="type x coord of upper left tile in qptiff\n")
     parser.add_argument('--y', type=int, default=2006, required=False,
@@ -111,6 +163,16 @@ if __name__ == '__main__':
     parser.add_argument('--downsample', type=int, default=2, required=False,
                         help="Downsample factor of QuPath binary image export\n")
 
+    # Args for composite_image
+    parser.add_argument('--x_composite', type=int, default=42004, required=False,
+                        help="type width of original tiff\n")
+    parser.add_argument('--y_composite', type=int, default=47909, required=False,
+                        help="type height of original tiff\n")
+    parser.add_argument('--img_type', type=str, default="cell-center-distance-prediction.png", required=False,
+                        help="type 'cell-center-distance-prediction.png' for composing a whole image\n"
+                             "type 'pseudochannel-0.png' for composing a whole image from CD3\n"
+                             "type 'pseudochannel-1.png' for composing a whole image from CD20\n")
+
     args = parser.parse_args()
 
     function_type = args.function
@@ -122,6 +184,12 @@ if __name__ == '__main__':
     outfile = args.outfile
     binary = args.binary
     downsample = args.downsample
+    x_composite = args.x_composite
+    y_composite = args.y_composite
+    image_type = args.img_type
 
-    if function_type == "comp_txt":
+    if function_type == "comp_img":
+        composite_image(path, x_composite, y_composite, image_type)
+
+    elif function_type == "comp_txt":
         composite_prediction(path, outfile, binary, x, y, offset_x, offset_y, downsample)
